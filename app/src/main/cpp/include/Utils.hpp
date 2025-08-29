@@ -128,8 +128,8 @@ namespace Utils {
             name = name.substr(0, name.length() - 2);
         }
 
-        bool isVT = Il2Cpp::il2cpp_class_is_valuetype(parentKlass);
-        bool isEnum = Il2Cpp::il2cpp_class_is_enum(parentKlass);
+        bool isVT = Il2Cpp::il2cpp_class_is_valuetype(klass);
+        bool isEnum = Il2Cpp::il2cpp_class_is_enum(klass);
         bool dontPtr = (isVT || isEnum);
 
         name = FixName(name.c_str());
@@ -139,7 +139,7 @@ namespace Utils {
         if (fullName == "System.Void") {
             ret = "void";
         } else if (fullName == "System.String") {
-            if (nullptr != parentKlass) {
+            if (parentKlass) {
                 if (dontPtr) {
                     ret = "::BNM::Structures::Mono::String*";
                 }
