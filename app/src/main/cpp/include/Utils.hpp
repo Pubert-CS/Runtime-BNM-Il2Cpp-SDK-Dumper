@@ -251,6 +251,9 @@ namespace Utils {
             }
             std::string n = Utils::FixName(Il2Cpp::il2cpp_class_get_name(klass));
             ret = std::format("{}", n);
+            if (!dontPtr) {
+                ret = ret + "*";
+            }
         }
 
         if (ret == "std::string*") return "std::string";
