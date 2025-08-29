@@ -1,0 +1,3 @@
+[submodule "app/src/main/cpp/extern/KittyMemory"]
+	path = app/src/main/cpp/extern/KittyMemory
+	url = https://github.com/MJx0/KittyMemory
