@@ -196,6 +196,12 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                     std::string safeParamName = Utils::generateSafeParamName(paramName, i);
                     std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass);
 
+                    int suffix = 0;
+                    std::string originalName = safeParamName;
+                    while (std::find(paramNames.begin(), paramNames.end(), safeParamName) != paramNames.end()) {
+                        safeParamName = originalName + std::to_string(suffix++);
+                    }
+
                     writer.Write(paramClassType + " " + safeParamName);
                     if (i < paramCount - 1) {
                         writer.Write(", ");
@@ -246,6 +252,12 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                 std::string safeParamName = Utils::generateSafeParamName(paramName, i);
                 std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass);
 
+                int suffix = 0;
+                std::string originalName = safeParamName;
+                while (std::find(paramNames.begin(), paramNames.end(), safeParamName) != paramNames.end()) {
+                    safeParamName = originalName + std::to_string(suffix++);
+                }
+
                 writer.Write(paramClassType + " " + safeParamName);
                 if (i < paramCount - 1) {
                     writer.Write(", ");
@@ -255,6 +267,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                 paramNames.push_back(safeParamName);
             }
         }
+
 
         writer.Write(") ");
         writer.WriteBracket();
@@ -464,25 +477,40 @@ void codegen::parseClass(void* klass) {
     const char* imageName = Il2Cpp::il2cpp_image_get_name(Il2Cpp::il2cpp_class_get_image(klass));
     const char* namespaze = Il2Cpp::il2cpp_class_get_namespace(klass);
 
-    if (strcmp(namespaze, "") == 0) {
+    if (!namespaze || strcmp(namespaze, "") == 0) {
         namespaze = "GlobalNamespace";
     }
 
     const char* name = Il2Cpp::il2cpp_class_get_name(klass);
+    if (!name || strcmp(name, "<Module>") == 0) return;
 
     std::string fixedName = Utils::FixName(name);
-
     std::string appendPath = Utils::GetDir({ std::string(namespaze) + ".hpp" });
 
     bool isFirstWrite = createdNamespaceFiles.find(appendPath) == createdNamespaceFiles.end();
+    std::string format = std::format("#include <SDK/Include/{}/{}.hpp>", namespaze, fixedName);
 
-    std::ios::openmode mode = isFirstWrite ? std::ios::trunc : std::ios::app;
-    std::ofstream outfile(appendPath, mode);
+    bool needsWrite = true;
 
-    if (outfile.is_open()) {
-        outfile << std::format("#include <SDK/Include/{}/{}.hpp>", namespaze, fixedName) << std::endl;
-        outfile.close();
-        createdNamespaceFiles.insert(appendPath);
+    if (!isFirstWrite) {
+        std::ifstream infile(appendPath);
+        if (infile) {
+            std::string content((std::istreambuf_iterator<char>(infile)),
+                                std::istreambuf_iterator<char>());
+            needsWrite = (content.find(format) == std::string::npos);
+        }
+    }
+
+    if (needsWrite) {
+        std::ofstream outfile(
+                appendPath,
+                isFirstWrite ? std::ios::trunc : std::ios::app
+        );
+
+        if (outfile) {
+            outfile << format << '\n';
+            createdNamespaceFiles.insert(appendPath);
+        }
     }
 
     std::string path = Utils::GetDir({ "Include", namespaze, fixedName + ".hpp" });
@@ -557,15 +585,15 @@ void codegen::parseClass(void* klass) {
 
     if (classType == "class ") {
         writer.WriteLine("public:");
-        writer.Write("static BNM::Class StaticClass() ");
+        writer.Write("static ::BNM::Class StaticClass() ");
         writer.WriteBracket();
-        writer.WriteLine(std::format("static BNM::Class clazz = BNM::Class(\"{}\", \"{}\", BNM::Image(\"{}\"));", Il2Cpp::il2cpp_class_get_namespace(klass), Il2Cpp::il2cpp_class_get_name(klass), imageName));
+        writer.WriteLine(std::format("static ::BNM::Class clazz = ::BNM::Class(\"{}\", \"{}\", ::BNM::Image(\"{}\"));", Il2Cpp::il2cpp_class_get_namespace(klass), Il2Cpp::il2cpp_class_get_name(klass), imageName));
         writer.WriteLine("return clazz;");
         writer.CloseBracket();
 
-        writer.Write("static BNM::MonoType* Type() ");
+        writer.Write("static ::BNM::MonoType* BNMType() ");
         writer.WriteBracket();
-        writer.WriteLine("static BNM::MonoType* myType = StaticClass().GetMonoType();");
+        writer.WriteLine("static ::BNM::MonoType* myType = StaticClass().GetMonoType();");
         writer.WriteLine("return myType;");
         writer.CloseBracket();
 

@@ -140,8 +140,10 @@ namespace Utils {
             ret = "void";
         } else if (fullName == "System.String") {
             if (parentKlass) {
-                if (dontPtr) {
+                if (Il2Cpp::il2cpp_class_is_valuetype(parentKlass) || Il2Cpp::il2cpp_class_is_enum(parentKlass)) {
                     ret = "::BNM::Structures::Mono::String*";
+                } else {
+                    ret = "std::string";
                 }
             } else {
                 ret = "std::string";
@@ -219,16 +221,10 @@ namespace Utils {
                     ret += "&";
                 }
             }
-
-            if (!Il2Cpp::il2cpp_class_is_valuetype(klass) &&
-                !fullName.starts_with("UnityEngine::") &&
-                !fullName.starts_with("BNM::")) {
-                ret = "::BNM::IL2CPP::Il2CppObject*";
-            }
         }
 
         if (ret == "") { // fallback here because idk :(
-            ret = "::BNM::IL2CPP::Il2CppObject*";
+            ret = "::BNM::IL2CPP::Il2CppObject* /*fallback*/";
         }
 
         if (isArray) {
