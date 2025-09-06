@@ -485,6 +485,9 @@ void codegen::parseClass(void* klass) {
     if (!name || strcmp(name, "<Module>") == 0) return;
 
     std::string fixedName = Utils::FixName(name);
+    if (fixedName.starts_with("$$c__DisplayClass")) {
+        return;
+    }
     std::string appendPath = Utils::GetDir({ std::string(namespaze) + ".hpp" });
 
     bool isFirstWrite = createdNamespaceFiles.find(appendPath) == createdNamespaceFiles.end();
@@ -610,10 +613,10 @@ void codegen::parseClass(void* klass) {
 
             uint64_t staticVal = 0;
             std::ostringstream offsetStream;
-            offsetStream << "0x" << std::hex << Il2Cpp::il2cpp_field_get_offset(field);
+            offsetStream << std::hex << Il2Cpp::il2cpp_field_get_offset(field);
 
             std::ostringstream rvaStream;
-            rvaStream << "0x" << std::hex << ((uintptr_t)Il2Cpp::il2cpp_field_get_offset(field) - mainMap->startAddress);
+            rvaStream << std::hex << ((uintptr_t)Il2Cpp::il2cpp_field_get_offset(field) - mainMap->startAddress);
 
             writer.WriteComment("Original Type: " +
                                 std::string(Il2Cpp::il2cpp_class_get_namespace(fieldClass)) + ":" +

@@ -221,10 +221,16 @@ namespace Utils {
                     ret += "&";
                 }
             }
+
+            if (!Il2Cpp::il2cpp_class_is_valuetype(klass) &&
+                !fullName.starts_with("UnityEngine::") &&
+                !fullName.starts_with("BNM::")) {
+                ret = "::BNM::IL2CPP::Il2CppObject*";
+            }
         }
 
         if (ret == "") { // fallback here because idk :(
-            ret = "::BNM::IL2CPP::Il2CppObject* /*fallback*/";
+            ret = "::BNM::IL2CPP::Il2CppObject*";
         }
 
         if (isArray) {
