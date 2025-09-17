@@ -110,7 +110,7 @@ namespace Utils {
         return trimmed;
     }
 
-    std::string GetCppNameFromIl2CppType(void* klass, void* parentKlass = nullptr) {
+    std::string GetCppNameFromIl2CppType(void* klass, void* parentKlass = nullptr, CppCodeWriter* writer = nullptr) {
         if (!klass) return "sus";
 
         auto classType = Il2Cpp::il2cpp_class_get_type(klass);
@@ -205,24 +205,54 @@ namespace Utils {
         } else if (fullName == "UnityEngine.Matrix3x3") {
             ret = "::BNM::Structures::Unity::Matrix3x3";
         } else {
-            if (Il2Cpp::il2cpp_class_is_enum(klass)) {
+            if (isEnum) {
                 std::string baseType = "int";
                 void* iter = nullptr;
                 void* field = Il2Cpp::il2cpp_class_get_fields(klass, &iter);
+                void* fieldClass = nullptr;
                 if (field) {
-                    auto fieldClass = Il2Cpp::il2cpp_class_from_type(Il2Cpp::il2cpp_field_get_type(field));
-                    baseType = GetCppNameFromIl2CppType(fieldClass);
+                    fieldClass = Il2Cpp::il2cpp_class_from_type(Il2Cpp::il2cpp_field_get_type(field));
+                    baseType = GetCppNameFromIl2CppType(fieldClass, nullptr, writer);
                 }
-                ret = baseType;
-            } else if (Il2Cpp::il2cpp_type_is_byref(classType)) {
+
+                if (writer) {
+                    std::string includePath = std::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
+                    if (writer->preview().find(includePath) == std::string::npos) {
+                        writer->WriteTopLine(includePath);
+                    }
+                    std::string ns = namespaze;
+                    replaceAll(ns, ".", "::");
+                    ret = std::format("::{}::{}", ns, name);
+                } else {
+                    ret = GetCppNameFromIl2CppType(fieldClass);
+                }
+            }
+            else if (isVT) {
+                if (parentKlass && !Il2Cpp::il2cpp_class_is_valuetype(parentKlass)) {
+                    if (writer) {
+                        std::string includePath = std::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
+                        if (writer->preview().find(includePath) == std::string::npos) {
+                            writer->WriteTopLine(includePath);
+                        }
+                        std::string ns = namespaze;
+                        replaceAll(ns, ".", "::");
+                        ret = std::format("::{}::{}", ns, name);
+                    } else {
+                        ret = "::BNM::IL2CPP::Il2CppObject*";
+                    }
+                } else {
+                    ret = "::BNM::IL2CPP::Il2CppObject*";
+                }
+            }
+            else if (Il2Cpp::il2cpp_type_is_byref(classType)) {
                 auto ogType = Il2Cpp::il2cpp_type_get_class_or_element_class(classType);
                 if (ogType) {
-                    ret = GetCppNameFromIl2CppType(ogType);
+                    ret = GetCppNameFromIl2CppType(ogType, nullptr, writer);
                     ret += "&";
                 }
             }
 
-            if (!Il2Cpp::il2cpp_class_is_valuetype(klass) &&
+            if (!isVT &&
                 !fullName.starts_with("UnityEngine::") &&
                 !fullName.starts_with("BNM::")) {
                 ret = "::BNM::IL2CPP::Il2CppObject*";

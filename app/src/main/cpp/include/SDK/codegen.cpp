@@ -125,6 +125,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
     if (!klass) return;
 
     std::unordered_map<std::string, int> methodNameCounts;
+    std::unordered_map<std::string, int> methodSignatureCounts;
 
     void* iter = nullptr;
     while (void* method = Il2Cpp::il2cpp_class_get_methods(klass, &iter)) {
@@ -137,6 +138,10 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         bool needPtr = (Il2Cpp::il2cpp_class_is_valuetype(klass) || Il2Cpp::il2cpp_class_is_enum(klass));
         bool isStatic = methodFlags & METHOD_ATTRIBUTE_STATIC;
 
+        if (reinterpret_cast<Il2CppType*>(const_cast<void*>(retType))->type == Il2CppTypeEnum::IL2CPP_TYPE_GENERICINST) {
+            continue;
+        }
+
         std::string newName = "";
         if (strcmp(name, ".ctor") == 0) {
             newName = "new_ctor";
@@ -148,11 +153,22 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
         newName = Utils::FixName(newName.c_str());
 
-        if (methodNameCounts.find(newName) != methodNameCounts.end()) {
-            methodNameCounts[newName]++;
-            newName += "_" + std::to_string(methodNameCounts[newName]);
+        uint32_t paramCount = Il2Cpp::il2cpp_method_get_param_count(method);
+        std::string signature = newName + "(";
+        for (int i = 0; i < (int)paramCount; i++) {
+            const void* paramType = Il2Cpp::il2cpp_method_get_param(method, i);
+            const void* paramClass = Il2Cpp::il2cpp_class_from_type(paramType);
+            std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
+            signature += paramClassType;
+            if (i < (int)paramCount - 1) signature += ",";
+        }
+        signature += ")";
+
+        if (methodSignatureCounts.find(signature) != methodSignatureCounts.end()) {
+            methodSignatureCounts[signature]++;
+            newName += "_" + std::to_string(methodSignatureCounts[signature]);
         } else {
-            methodNameCounts[newName] = 0;
+            methodSignatureCounts[signature] = 0;
         }
 
         uint64_t staticVal = 0;
@@ -183,18 +199,17 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             }
 
             writer.Write(std::format("static {} {}(", ctype, newName));
-            uint32_t paramCount = Il2Cpp::il2cpp_method_get_param_count(method);
             std::vector<std::string> paramTypes;
             std::vector<std::string> paramNames;
 
             if (paramCount > 0) {
-                for (int i = 0; i < paramCount; ++i) {
+                for (int i = 0; i < (int)paramCount; ++i) {
                     const char* paramName = Il2Cpp::il2cpp_method_get_param_name(method, i);
                     const void* paramType = Il2Cpp::il2cpp_method_get_param(method, i);
                     const void* paramClass = Il2Cpp::il2cpp_class_from_type(paramType);
 
                     std::string safeParamName = Utils::generateSafeParamName(paramName, i);
-                    std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass);
+                    std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
 
                     int suffix = 0;
                     std::string originalName = safeParamName;
@@ -203,7 +218,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                     }
 
                     writer.Write(paramClassType + " " + safeParamName);
-                    if (i < paramCount - 1) {
+                    if (i < (int)paramCount - 1) {
                         writer.Write(", ");
                     }
 
@@ -214,12 +229,12 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             writer.Write(")");
             writer.WriteBracket();
             writer.Write(std::format("return ({})StaticClass().CreateNewObjectParameters(", ctype));
-            for (int i = 0; i < paramNames.size(); i++) {
+            for (int i = 0; i < (int)paramNames.size(); i++) {
                 if (paramTypes[i] == "std::string")
                     writer.Write(std::format("::BNM::CreateMonoString({})", paramNames[i]));
                 else
                     writer.Write(paramNames[i]);
-                if (i < paramNames.size() - 1) {
+                if (i < (int)paramNames.size() - 1) {
                     writer.Write(", ");
                 }
             }
@@ -228,7 +243,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             continue;
         }
 
-        std::string cppType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(typeClass), klass);
+        std::string cppType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(typeClass), klass, &writer);
 
         writer.WriteLine("template <typename T = " + cppType + ">");
 
@@ -240,17 +255,16 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         writer.Write("(");
 
         std::vector<std::string> paramTypes;
-        uint32_t paramCount = Il2Cpp::il2cpp_method_get_param_count(method);
         std::vector<std::string> paramNames;
 
         if (paramCount > 0) {
-            for (int i = 0; i < paramCount; ++i) {
+            for (int i = 0; i < (int)paramCount; ++i) {
                 const char* paramName = Il2Cpp::il2cpp_method_get_param_name(method, i);
                 const void* paramType = Il2Cpp::il2cpp_method_get_param(method, i);
                 const void* paramClass = Il2Cpp::il2cpp_class_from_type(paramType);
 
                 std::string safeParamName = Utils::generateSafeParamName(paramName, i);
-                std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass);
+                std::string paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
 
                 int suffix = 0;
                 std::string originalName = safeParamName;
@@ -259,7 +273,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                 }
 
                 writer.Write(paramClassType + " " + safeParamName);
-                if (i < paramCount - 1) {
+                if (i < (int)paramCount - 1) {
                     writer.Write(", ");
                 }
 
@@ -268,11 +282,10 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             }
         }
 
-
         writer.Write(") ");
         writer.WriteBracket();
 
-        std::string bnmMethodName = "__bnm_methodCall__" + std::to_string(methodNameCounts[Utils::FixName(name)]);
+        std::string bnmMethodName = "__bnm_methodCall__" + std::to_string(methodSignatureCounts[signature]);
 
         if (methodFlags & METHOD_ATTRIBUTE_PINVOKE_IMPL) {
             if (!isStatic) {
@@ -282,18 +295,18 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
             std::string ptypeStuff = "";
             std::string pnameStuff = "";
-            for (int i = 0; i < paramTypes.size(); i++) {
+            for (int i = 0; i < (int)paramTypes.size(); i++) {
                 ptypeStuff += paramTypes[i];
-                if (i < paramTypes.size() - 1)
+                if (i < (int)paramTypes.size() - 1)
                     ptypeStuff += ", ";
             }
 
-            for (int i = 0; i < paramNames.size(); i++) {
+            for (int i = 0; i < (int)paramNames.size(); i++) {
                 if (paramTypes[i] == "std::string")
                     pnameStuff += "::BNM::CreateMonoString(" + paramNames[i] + ")";
                 else
                     pnameStuff += paramNames[i];
-                if (i < paramNames.size() - 1)
+                if (i < (int)paramNames.size() - 1)
                     pnameStuff += ", ";
             }
 
@@ -318,10 +331,10 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         } else {
             if (paramCount > 0) {
                 std::string paramNameArr = "";
-                for (int i = 0; i < paramCount; i++) {
+                for (int i = 0; i < (int)paramCount; i++) {
                     const char* originalParamName = Il2Cpp::il2cpp_method_get_param_name(method, i);
                     paramNameArr += std::format("\"{}\"", originalParamName ? originalParamName : "");
-                    if (i < paramCount - 1)
+                    if (i < (int)paramCount - 1)
                         paramNameArr += ", ";
                 }
                 writer.WriteLine(std::format("static BNM::Method<{}> ", cppType == "std::string" ? "BNM::Structures::Mono::String*" : "T") + bnmMethodName + std::format(" = StaticClass().GetMethod(\"{}\", {{{}}});", std::string(name), paramNameArr));
@@ -337,12 +350,12 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             }
             writer.Write(std::format("{}.Call(", bnmMethodName));
 
-            for (int i = 0; i < paramNames.size(); ++i) {
+            for (int i = 0; i < (int)paramNames.size(); ++i) {
                 if (paramTypes[i] == "std::string")
                     writer.Write("::BNM::CreateMonoString(" + paramNames[i] + ")");
                 else
                     writer.Write(paramNames[i]);
-                if (i < paramNames.size() - 1) {
+                if (i < (int)paramNames.size() - 1) {
                     writer.Write(", ");
                 }
             }
@@ -388,7 +401,7 @@ void codegen::parseFields(void *klass, CppCodeWriter &writer) {
 
         uint32_t flags = Il2Cpp::il2cpp_field_get_flags(field);
 
-        std::string cppType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(fieldClass), klass);
+        std::string cppType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(fieldClass), klass, &writer);
 
         writer.WriteComment(std::string(Il2Cpp::il2cpp_class_get_namespace(const_cast<void*>(fieldClass))) + "." +
                             std::string(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(fieldClass))) +
@@ -485,7 +498,7 @@ void codegen::parseClass(void* klass) {
     if (!name || strcmp(name, "<Module>") == 0) return;
 
     std::string fixedName = Utils::FixName(name);
-    if (fixedName.starts_with("$$c__DisplayClass")) {
+    if (fixedName.starts_with("$$c__DisplayClass") || fixedName.starts_with("$$f__AnonymousType")) {
         return;
     }
     std::string appendPath = Utils::GetDir({ std::string(namespaze) + ".hpp" });
@@ -622,7 +635,7 @@ void codegen::parseClass(void* klass) {
                                 std::string(Il2Cpp::il2cpp_class_get_namespace(fieldClass)) + ":" +
                                 std::string(Il2Cpp::il2cpp_class_get_name(fieldClass)) +
                                 " | Offset " + offsetStream.str() + " | RVA " + rvaStream.str());
-            writer.WriteLine(Utils::GetCppNameFromIl2CppType(fieldClass) + " " + std::string(Utils::FixName(fieldName)) + ";");
+            writer.WriteLine(Utils::GetCppNameFromIl2CppType(fieldClass, nullptr, &writer) + " " + std::string(Utils::FixName(fieldName)) + ";");
         }
     } else {
         void* fieldIter = nullptr;
