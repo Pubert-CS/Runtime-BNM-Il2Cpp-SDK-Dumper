@@ -11,6 +11,9 @@ file(GLOB_RECURSE KITTY_MEMORY_SOURCES extern/KittyMemory/KittyMemory/*.cpp)
 add_library(${CMAKE_PROJECT_NAME} SHARED
         native-lib.cpp
         include/SDK/codegen.cpp
+	include/SDK/fmt/src/fmt.cc
+	include/SDK/fmt/src/format.cc
+	include/SDK/fmt/src/os.cc
         ${KITTY_MEMORY_SOURCES}
 )
 
