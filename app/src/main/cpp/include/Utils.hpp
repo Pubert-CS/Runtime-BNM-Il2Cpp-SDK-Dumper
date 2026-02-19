@@ -4,6 +4,7 @@
 #include "cstddef"
 #include "vector"
 #include "filesystem"
+#include <SDK/fmt/format.h>
 #include "iostream"
 #include "fstream"
 #include "sstream"
@@ -216,13 +217,13 @@ namespace Utils {
                 }
 
                 if (writer) {
-                    std::string includePath = std::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
+                    std::string includePath = fmt::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
                     if (writer->preview().find(includePath) == std::string::npos) {
                         writer->WriteTopLine(includePath);
                     }
                     std::string ns = namespaze;
                     replaceAll(ns, ".", "::");
-                    ret = std::format("::{}::{}", ns, name);
+                    ret = fmt::format("::{}::{}", ns, name);
                 } else {
                     ret = GetCppNameFromIl2CppType(fieldClass);
                 }
@@ -230,13 +231,13 @@ namespace Utils {
             else if (isVT) {
                 if (parentKlass && !Il2Cpp::il2cpp_class_is_valuetype(parentKlass)) {
                     if (writer) {
-                        std::string includePath = std::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
+                        std::string includePath = fmt::format("#include<SDK/Include/{}/{}.hpp>", namespaze, name);
                         if (writer->preview().find(includePath) == std::string::npos) {
                             writer->WriteTopLine(includePath);
                         }
                         std::string ns = namespaze;
                         replaceAll(ns, ".", "::");
-                        ret = std::format("::{}::{}", ns, name);
+                        ret = fmt::format("::{}::{}", ns, name);
                     } else {
                         ret = "::BNM::IL2CPP::Il2CppObject*";
                     }
@@ -272,8 +273,8 @@ namespace Utils {
         }
 
         if (parentKlass != nullptr &&
-            std::format("{}.{}", Il2Cpp::il2cpp_class_get_namespace(parentKlass), Il2Cpp::il2cpp_class_get_name(parentKlass)) ==
-            std::format("{}.{}", Il2Cpp::il2cpp_class_get_namespace(klass), Il2Cpp::il2cpp_class_get_name(klass))) {
+            fmt::format("{}.{}", Il2Cpp::il2cpp_class_get_namespace(parentKlass), Il2Cpp::il2cpp_class_get_name(parentKlass)) ==
+            fmt::format("{}.{}", Il2Cpp::il2cpp_class_get_namespace(klass), Il2Cpp::il2cpp_class_get_name(klass))) {
             std::string nspace = "";
             const char* dfault = Il2Cpp::il2cpp_class_get_namespace(klass);
             if (strcmp(dfault, "") == 0) {
@@ -282,7 +283,7 @@ namespace Utils {
                 nspace = std::string(dfault);
             }
             std::string n = Utils::FixName(Il2Cpp::il2cpp_class_get_name(klass));
-            ret = std::format("{}", n);
+            ret = fmt::format("{}", n);
             if (!dontPtr) {
                 ret = ret + "*";
             }
