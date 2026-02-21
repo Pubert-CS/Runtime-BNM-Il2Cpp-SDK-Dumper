@@ -830,7 +830,7 @@ void codegen::parseClass(void* klass) {
 
         writer.WriteLine();
         writer.WriteLine("template <>");
-        writer.Write("BNM::Defaults::DefaultTypeRef ");
+        writer.Write("inline BNM::Defaults::DefaultTypeRef ");
         writer.Write("BNM::Defaults::Get<" + typePath + ">() ");
         writer.WriteBracket();
         writer.WriteLine("static BNM::Defaults::Internal::ClassType classCache = nullptr;");
