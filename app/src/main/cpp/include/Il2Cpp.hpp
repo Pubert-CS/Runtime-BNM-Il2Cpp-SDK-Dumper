@@ -35,11 +35,13 @@ namespace Il2Cpp {
 
     IL2CPP_FUNC(bool, il2cpp_class_is_valuetype, symbol_il2cpp_class_is_valuetype, (const void*));
     IL2CPP_FUNC(bool, il2cpp_class_is_enum, symbol_il2cpp_class_is_enum, (const void*));
+    IL2CPP_FUNC(bool, il2cpp_method_is_generic, symbol_il2cpp_method_is_generic, (const void*));
 
     IL2CPP_FUNC(void*, il2cpp_class_from_type, symbol_il2cpp_class_from_type, (const void*));
     IL2CPP_FUNC(const char*, il2cpp_class_get_name, symbol_il2cpp_class_get_name, (void*));
     IL2CPP_FUNC(const char*, il2cpp_class_get_namespace, symbol_il2cpp_class_get_namespace, (void*));
     IL2CPP_FUNC(void*, il2cpp_class_get_parent, symbol_il2cpp_class_get_parent, (void*));
+    IL2CPP_FUNC(void*, il2cpp_class_get_declaring_type, symbol_il2cpp_class_get_declaring_type, (void*));
     IL2CPP_FUNC(bool, il2cpp_type_is_static, symbol_il2cpp_type_is_static, (const void*));
     IL2CPP_FUNC(const char*, il2cpp_image_get_name, symbol_il2cpp_image_get_name, (const void*));
     IL2CPP_FUNC(const void*, il2cpp_class_get_image, symbol_il2cpp_class_get_image, (void*));

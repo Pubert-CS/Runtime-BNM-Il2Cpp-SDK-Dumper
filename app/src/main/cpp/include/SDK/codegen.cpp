@@ -7,7 +7,7 @@
 #include "filesystem"
 #include "fstream"
 #include "sstream"
-#include <SDK/fmt/format.h>
+#include <fmt/format.h>
 #include "Utils.hpp"
 #include "format"
 #include "flags.h"
@@ -123,11 +123,14 @@ std::string trim(const std::string& str) {
 void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
     if (!klass) return;
 
+    auto fullClassName = fmt::format("{}.{}", Il2Cpp::il2cpp_class_get_namespace(klass), Il2Cpp::il2cpp_class_get_name(klass));
+
     std::unordered_map<std::string, int> methodNameCounts;
     std::unordered_map<std::string, int> methodSignatureCounts;
 
     void* iter = nullptr;
     while (void* method = Il2Cpp::il2cpp_class_get_methods(klass, &iter)) {
+        if (Il2Cpp::il2cpp_method_is_generic(method)) continue; // not handling allat.
         const char* name = Il2Cpp::il2cpp_method_get_name(method);
         const void* retType = Il2Cpp::il2cpp_method_get_return_type(method);
         const void* typeClass = Il2Cpp::il2cpp_class_from_type(retType);
@@ -136,10 +139,6 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
         bool needPtr = (Il2Cpp::il2cpp_class_is_valuetype(klass) || Il2Cpp::il2cpp_class_is_enum(klass));
         bool isStatic = methodFlags & METHOD_ATTRIBUTE_STATIC;
-
-        if (reinterpret_cast<Il2CppType*>(const_cast<void*>(retType))->type == Il2CppTypeEnum::IL2CPP_TYPE_GENERICINST) {
-            continue;
-        }
 
         std::string newName = "";
         if (strcmp(name, ".ctor") == 0) {
@@ -159,26 +158,30 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             const void* paramClass = Il2Cpp::il2cpp_class_from_type(paramType);
             
             std::string paramClassName = Utils::FixName(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(paramClass)));
-            bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos || 
-                                       paramClassName.find("__f__AnonymousType") != std::string::npos;
+            bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos ||
+                                  paramClassName.find("__f__AnonymousType") != std::string::npos ||
+                                  paramClassName.find("$$c__DisplayClass") != std::string::npos ||
+                                  paramClassName.find("$$f__AnonymousType") != std::string::npos;
             
             std::string paramClassType;
             if (isParamDisplayClass) {
-                paramClassType = "BNM::IL2CPP::Il2CppObject*";
+                paramClassType = "::BNM::IL2CPP::Il2CppObject*";
             } else {
                 paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
             }
+
+            if (Il2Cpp::il2cpp_type_is_byref(paramType)) {
+                paramClassType += "&";
+            }
             
             signature += paramClassType;
+
             if (i < (int)paramCount - 1) signature += ",";
         }
         signature += ")";
 
-        if (methodSignatureCounts.find(signature) != methodSignatureCounts.end()) {
-            methodSignatureCounts[signature]++;
-            newName += "_" + std::to_string(methodSignatureCounts[signature]);
-        } else {
-            methodSignatureCounts[signature] = 0;
+        if (methodSignatureCounts[signature]++ > 0) {
+            newName += "_" + std::to_string(++methodNameCounts[newName]);
         }
 
         uint64_t staticVal = 0;
@@ -189,13 +192,15 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         rvaStream << "0x" << std::hex << ((uintptr_t)*(void**)method - mainMap->startAddress);
 
         std::string typeClassName = Utils::FixName(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(typeClass)));
-        bool isRetDisplayClass = typeClassName.find("__c__DisplayClass") != std::string::npos || 
-                                 typeClassName.find("__f__AnonymousType") != std::string::npos;
+        bool isRetDisplayClass = typeClassName.find("__c__DisplayClass") != std::string::npos ||
+                              typeClassName.find("__f__AnonymousType") != std::string::npos ||
+                              typeClassName.find("$$c__DisplayClass") != std::string::npos ||
+                              typeClassName.find("$$f__AnonymousType") != std::string::npos;
 
         writer.WriteComment("Original Type: " +
                             std::string(Il2Cpp::il2cpp_class_get_namespace(const_cast<void*>(typeClass))) + ":" +
                             std::string(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(typeClass))) +
-                            " | Offset " + offsetStream.str() + " | RVA " + rvaStream.str());
+                            " | Offset 0x" + offsetStream.str());
 
         if (newName.find("new_ctor") == 0 && !needPtr) {
             std::string cns = std::string(Il2Cpp::il2cpp_class_get_namespace(klass));
@@ -203,6 +208,8 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
             if (cns == "") {
                 cns = "GlobalNamespace";
+            } else if (cns.starts_with("UnityEngine")) {
+                cns = "C" + cns;
             }
 
             std::string ctype = "::" + cns + "::" + cn;
@@ -225,12 +232,14 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                     std::string safeParamName = Utils::generateSafeParamName(paramName, i);
                     
                     std::string paramClassName = Utils::FixName(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(paramClass)));
-                    bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos || 
-                                               paramClassName.find("__f__AnonymousType") != std::string::npos;
+                    bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos ||
+                                          paramClassName.find("__f__AnonymousType") != std::string::npos ||
+                                          paramClassName.find("$$c__DisplayClass") != std::string::npos ||
+                                          paramClassName.find("$$f__AnonymousType") != std::string::npos;
                     
                     std::string paramClassType;
                     if (isParamDisplayClass) {
-                        paramClassType = "BNM::IL2CPP::Il2CppObject*";
+                        paramClassType = "::BNM::IL2CPP::Il2CppObject*";
                     } else {
                         paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
                     }
@@ -269,10 +278,15 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
         std::string cppType;
         if (isRetDisplayClass) {
-            cppType = "BNM::IL2CPP::Il2CppObject*";
+            cppType = "::BNM::IL2CPP::Il2CppObject*";
         } else {
             cppType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(typeClass), klass, &writer);
         }
+
+        std::string retClassName = Il2Cpp::il2cpp_class_get_name(const_cast<void*>(typeClass));
+        bool retIsArray = std::string(retClassName).ends_with("[]");
+        bool retIsList = std::string(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(typeClass)))
+                         == "List`1";
 
         writer.WriteLine("template <typename T = " + cppType + ">");
 
@@ -280,29 +294,43 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             writer.Write("static ");
         }
 
-        writer.Write("T " + newName);
+        if (retIsArray) {
+            writer.Write("::BNM::Structures::Mono::Array<T>* " + newName);
+        } else if (retIsList) {
+            writer.Write("::BNM::Structures::Mono::List<T>* " + newName);
+        } else {
+            writer.Write("T " + newName);
+        }
         writer.Write("(");
 
         std::vector<std::string> paramTypes;
         std::vector<std::string> paramNames;
+        std::vector<const void*> paramTypesReal;
 
         if (paramCount > 0) {
             for (int i = 0; i < (int)paramCount; ++i) {
                 const char* paramName = Il2Cpp::il2cpp_method_get_param_name(method, i);
                 const void* paramType = Il2Cpp::il2cpp_method_get_param(method, i);
                 const void* paramClass = Il2Cpp::il2cpp_class_from_type(paramType);
+                paramTypesReal.emplace_back(paramType);
 
                 std::string safeParamName = Utils::generateSafeParamName(paramName, i);
                 
                 std::string paramClassName = Utils::FixName(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(paramClass)));
-                bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos || 
-                                           paramClassName.find("__f__AnonymousType") != std::string::npos;
+                bool isParamDisplayClass = paramClassName.find("__c__DisplayClass") != std::string::npos ||
+                                           paramClassName.find("__f__AnonymousType") != std::string::npos ||
+                                           paramClassName.find("$$c__DisplayClass") != std::string::npos ||
+                                           paramClassName.find("$$f__AnonymousType") != std::string::npos;
                 
                 std::string paramClassType;
                 if (isParamDisplayClass) {
-                    paramClassType = "BNM::IL2CPP::Il2CppObject*";
+                    paramClassType = "::BNM::IL2CPP::Il2CppObject*";
                 } else {
                     paramClassType = Utils::GetCppNameFromIl2CppType(const_cast<void*>(paramClass), klass, &writer);
+                }
+
+                if (Il2Cpp::il2cpp_type_is_byref(paramType)) {
+                    paramClassType += "&";
                 }
 
                 int suffix = 0;
@@ -324,11 +352,11 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         writer.Write(") ");
         writer.WriteBracket();
 
-        std::string bnmMethodName = "__bnm_methodCall__" + std::to_string(methodSignatureCounts[signature]);
+        std::string bnmMethodName = "__bnm_methodCall__0";
 
         if (methodFlags & METHOD_ATTRIBUTE_PINVOKE_IMPL) {
             if (!isStatic) {
-                paramTypes.insert(paramTypes.begin(), "BNM::IL2CPP::Il2CppObject*");
+                paramTypes.insert(paramTypes.begin(), "::BNM::IL2CPP::Il2CppObject*");
                 paramNames.insert(paramNames.begin(), "this");
             }
 
@@ -356,7 +384,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
             pns += Il2Cpp::il2cpp_class_get_name(klass);
 
-            writer.WriteLine("static auto " + bnmMethodName + fmt::format(" = (T(*)({}))BNM::GetExternMethod(\"{}::{}\");", ptypeStuff, pns, Il2Cpp::il2cpp_method_get_name(method)));
+            writer.WriteLine("static auto " + bnmMethodName + fmt::format(" = (T(*)({}))::BNM::GetExternMethod(\"{}::{}\");", ptypeStuff, pns, Il2Cpp::il2cpp_method_get_name(method)));
 
             writer.Write("return ");
             writer.Write(fmt::format("{}({})", bnmMethodName, pnameStuff));
@@ -368,6 +396,10 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
 
             writer.CloseBracket();
         } else {
+            auto tFixed = retIsArray ? "::BNM::Structures::Mono::Array<T>*" : "T";
+            if (retIsList) {
+                tFixed = "::BNM::Structures::Mono::List<T>*";
+            }
             if (paramCount > 0) {
                 std::string paramNameArr = "";
                 for (int i = 0; i < (int)paramCount; i++) {
@@ -376,10 +408,13 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
                     if (i < (int)paramCount - 1)
                         paramNameArr += ", ";
                 }
-                writer.WriteLine(fmt::format("static BNM::Method<{}> ", cppType == "std::string" ? "BNM::Structures::Mono::String*" : "T") + bnmMethodName + fmt::format(" = StaticClass().GetMethod(\"{}\", {{{}}});", std::string(name), paramNameArr));
+                writer.Write(fmt::format("static ::BNM::Method<{}> ", cppType == "std::string" ? "::BNM::Structures::Mono::String*" : tFixed) + bnmMethodName + fmt::format(" = StaticClass().GetMethod(\"{}\", {{{}}})", std::string(name), paramNameArr));
             } else {
-                writer.WriteLine(fmt::format("static BNM::Method<{}> ", cppType == "std::string" ? "BNM::Structures::Mono::String*" : "T") + bnmMethodName + fmt::format(" = StaticClass().GetMethod(\"{}\", {});", std::string(name), std::to_string(paramCount)));
+                writer.Write(fmt::format("static ::BNM::Method<{}> ", cppType == "std::string" ? "::BNM::Structures::Mono::String*" : tFixed) + bnmMethodName + fmt::format(" = StaticClass().GetMethod(\"{}\", {})", std::string(name), std::to_string(paramCount)));
             }
+
+            writer.WriteLine(";");
+
 
             if (!isStatic)
                 writer.WriteLine(fmt::format("{}.SetInstance((BNM::IL2CPP::Il2CppObject*)this);", bnmMethodName));
@@ -390,10 +425,15 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
             writer.Write(fmt::format("{}.Call(", bnmMethodName));
 
             for (int i = 0; i < (int)paramNames.size(); ++i) {
-                if (paramTypes[i] == "std::string")
+                if (paramTypes[i] == "std::string") {
                     writer.Write("::BNM::CreateMonoString(" + paramNames[i] + ")");
-                else
+                }
+                else {
+                    if (Il2Cpp::il2cpp_type_is_byref(paramTypesReal[i])) {
+                        writer.Write("&");
+                    }
                     writer.Write(paramNames[i]);
+                }
                 if (i < (int)paramNames.size() - 1) {
                     writer.Write(", ");
                 }
@@ -409,6 +449,7 @@ void codegen::parseMethods(void* klass, CppCodeWriter& writer) {
         }
     }
 }
+
 void codegen::parseFields(void *klass, CppCodeWriter &writer) {
     if (!klass) return;
 
@@ -437,10 +478,16 @@ void codegen::parseFields(void *klass, CppCodeWriter &writer) {
         }
 
         std::string fieldClassName = Utils::FixName(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(fieldClass)));
-        bool isDisplayClass = fieldClassName.find("__c__DisplayClass") != std::string::npos || 
-                             fieldClassName.find("__f__AnonymousType") != std::string::npos;
+        bool isDisplayClass = fieldClassName.find("__c__DisplayClass") != std::string::npos ||
+                              fieldClassName.find("__f__AnonymousType") != std::string::npos ||
+                              fieldClassName.find("$$c__DisplayClass") != std::string::npos ||
+                              fieldClassName.find("$$f__AnonymousType") != std::string::npos;
 
         uint32_t flags = Il2Cpp::il2cpp_field_get_flags(field);
+
+        std::string rawFieldClassName = std::string(Il2Cpp::il2cpp_class_get_name(const_cast<void*>(fieldClass)));
+        bool isArray = rawFieldClassName.ends_with("[]");
+        bool isList = rawFieldClassName == "List`1";
 
         std::string cppType;
         if (isDisplayClass) {
@@ -454,32 +501,71 @@ void codegen::parseFields(void *klass, CppCodeWriter &writer) {
                             " | Offset: 0x" + std::to_string(Il2Cpp::il2cpp_field_get_offset(field)));
 
         bool isStatic = flags & FIELD_ATTRIBUTE_STATIC;
+        std::string fixedName = Utils::FixName(name);
 
         writer.WriteLine("template <typename T = " + cppType + ">");
-        if (isStatic) { writer.Write("static "); }
-        writer.Write("T " + Utils::FixName(name) + "()");
+        if (isStatic) writer.Write("static ");
+
+        if (isArray) {
+            writer.Write("::BNM::Structures::Mono::Array<T>* " + fixedName + "()");
+        } else if (isList) {
+            writer.Write("::BNM::Structures::Mono::List<T>* " + fixedName + "()");
+        } else {
+            writer.Write("T " + fixedName + "()");
+        }
+
+        auto tFixed = isArray ? "::BNM::Structures::Mono::Array<T>*" : "T";
+        if (isList) {
+            tFixed = "::BNM::Structures::Mono::List<T>*";
+        }
+
         writer.WriteBracket();
-        writer.WriteLine(fmt::format("static BNM::Field<{}> __bnm__field__ = StaticClass().GetField(\"{}\");", cppType == "std::string" ? "BNM::Structures::Mono::String*" : "T", name));
+        writer.WriteLine(fmt::format(
+                "static BNM::Field<{}> __bnm__field__ = StaticClass().GetField(\"{}\");",
+                cppType == "std::string" ? "BNM::Structures::Mono::String*" : tFixed,
+                name
+        ));
         if (!isStatic) writer.WriteLine("__bnm__field__.SetInstance((BNM::IL2CPP::Il2CppObject*)this);");
-        writer.Write("return __bnm__field__()");
-        if (cppType == "std::string")
-            writer.Write("->str()");
+
+        if (isArray) {
+            writer.Write("return (::BNM::Structures::Mono::Array<T>*)__bnm__field__()");
+        } else if (isList) {
+            writer.Write("return (::BNM::Structures::Mono::List<T>*)__bnm__field__()");
+        } else {
+            writer.Write("return __bnm__field__()");
+            if (cppType == "std::string")
+                writer.Write("->str()");
+        }
         writer.WriteLine(";");
         writer.CloseBracket();
 
         writer.WriteLine("template <typename T = " + cppType + ">");
-        if (isStatic) { writer.Write("static "); }
-        writer.Write("void set_" + Utils::FixName(name) + "(" + cppType + " $value)");
+        if (isStatic) writer.Write("static ");
+
+        std::string setterParamType;
+        if (isArray) {
+            setterParamType = "::BNM::Structures::Mono::Array<T>*";
+        } else if (isList) {
+            setterParamType = "::BNM::Structures::Mono::List<T>*";
+        } else {
+            setterParamType = cppType;
+        }
+
+        writer.Write("void set_" + fixedName + "(" + setterParamType + " $value)");
         writer.WriteBracket();
-        writer.WriteLine(fmt::format("static BNM::Field<{}> __bnm__field__ = StaticClass().GetField(\"{}\");", cppType == "std::string" ? "BNM::Structures::Mono::String*" : "T", name));
+        writer.WriteLine(fmt::format(
+                "static BNM::Field<{}> __bnm__field__ = StaticClass().GetField(\"{}\");",
+                cppType == "std::string" ? "BNM::Structures::Mono::String*" : tFixed,
+                name
+        ));
         if (!isStatic) writer.WriteLine("__bnm__field__.SetInstance((BNM::IL2CPP::Il2CppObject*)this);");
+
         writer.Write("__bnm__field__.Set(");
         if (cppType == "std::string")
             writer.Write("::BNM::CreateMonoString($value)");
         else
             writer.Write("$value");
-        writer.Write(")");
-        writer.WriteLine(";");
+        writer.WriteLine(");");
         writer.CloseBracket();
 
         writer.WriteLine();
@@ -487,6 +573,7 @@ void codegen::parseFields(void *klass, CppCodeWriter &writer) {
         field = Il2Cpp::il2cpp_class_get_fields(klass, &fieldIter);
     }
 }
+
 std::string codegen::getClassType(void* klass){
     bool isClassEnum = Il2Cpp::il2cpp_class_is_enum(klass);
     bool isClassValueType = Il2Cpp::il2cpp_class_is_valuetype(klass);
@@ -509,11 +596,15 @@ std::string codegen::forwardDeclare(void* klass, void* parentKlass, CppCodeWrite
     std::string ifacens = Il2Cpp::il2cpp_class_get_namespace(klass);
     std::string ifacen = Utils::FixName(Il2Cpp::il2cpp_class_get_name(klass));
 
-    bool isDisplayClass = ifacen.find("__c__DisplayClass") != std::string::npos || 
-                         ifacen.find("__f__AnonymousType") != std::string::npos;
+    bool isDisplayClass = ifacen.find("__c__DisplayClass") != std::string::npos ||
+                          ifacen.find("__f__AnonymousType") != std::string::npos ||
+                          ifacen.find("$$c__DisplayClass") != std::string::npos ||
+                          ifacen.find("$$f__AnonymousType") != std::string::npos;
 
     if (ifacens.empty()) {
         ifacens = "GlobalNamespace";
+    } else if (ifacens.starts_with("UnityEngine")) {
+        ifacens = "C" + ifacens;
     }
 
     if (isDisplayClass) {
@@ -536,15 +627,23 @@ void codegen::parseClass(void* klass) {
 
     Settings::classCount++;
 
-    const char* imageName = Il2Cpp::il2cpp_image_get_name(Il2Cpp::il2cpp_class_get_image(klass));
-    const char* namespaze = Il2Cpp::il2cpp_class_get_namespace(klass);
-
-    if (!namespaze || strcmp(namespaze, "") == 0) {
-        namespaze = "GlobalNamespace";
-    }
-
     const char* name = Il2Cpp::il2cpp_class_get_name(klass);
     if (!name || strcmp(name, "<Module>") == 0) return;
+
+    const char* imageName = Il2Cpp::il2cpp_image_get_name(Il2Cpp::il2cpp_class_get_image(klass));
+    auto namespaze = std::string(Il2Cpp::il2cpp_class_get_namespace(klass));
+    std::string originalNamespace = namespaze;
+
+    auto fullNameRaw = fmt::format("{}.{}", originalNamespace, name);
+    if (Utils::DefaultTypeMap.contains(fullNameRaw)) {
+        return;
+    }
+
+    if (namespaze == "") {
+        namespaze = "GlobalNamespace";
+    } else if (std::string(namespaze).starts_with("UnityEngine")) {
+        namespaze = fmt::format("C{}", namespaze);
+    }
 
     std::string fixedName = Utils::FixName(name);
     if (fixedName.starts_with("$$c__DisplayClass") || fixedName.starts_with("$$f__AnonymousType") ||
@@ -552,7 +651,8 @@ void codegen::parseClass(void* klass) {
         return;
     }
 
-    std::string appendPath = Utils::GetDir({ std::string(namespaze) + ".hpp" });
+
+    std::string appendPath = Utils::GetDir({ namespaze + ".hpp" });
 
     bool isFirstWrite = createdNamespaceFiles.find(appendPath) == createdNamespaceFiles.end();
     std::string format = fmt::format("#include <SDK/Include/{}/{}.hpp>", namespaze, fixedName);
@@ -588,7 +688,7 @@ void codegen::parseClass(void* klass) {
     writer.WriteInclude("BNMIncludes.hpp");
     writer.WriteLine();
 
-    std::vector<std::string> namespaceSplit = split(namespaze ? namespaze : "", ".");
+    std::vector<std::string> namespaceSplit = split(namespaze, ".");
 
     bool isClassEnum = Il2Cpp::il2cpp_class_is_enum(klass);
     bool isClassValueType = Il2Cpp::il2cpp_class_is_valuetype(klass);
@@ -678,6 +778,15 @@ void codegen::parseClass(void* klass) {
         void* fieldIter = nullptr;
         void* field = nullptr;
         while ((field = Il2Cpp::il2cpp_class_get_fields(klass, &fieldIter)) != nullptr) {
+            auto flags = Il2Cpp::il2cpp_field_get_flags(field);
+
+            if (flags & FIELD_ATTRIBUTE_LITERAL) {
+                continue;
+            }
+            if (flags & FIELD_ATTRIBUTE_STATIC) {
+                continue;
+            }
+
             const char* fieldName = Il2Cpp::il2cpp_field_get_name(field);
             const void* fieldType = Il2Cpp::il2cpp_field_get_type(field);
             auto fieldClass = Il2Cpp::il2cpp_class_from_type(fieldType);
@@ -692,7 +801,7 @@ void codegen::parseClass(void* klass) {
             writer.WriteComment("Original Type: " +
                                 std::string(Il2Cpp::il2cpp_class_get_namespace(fieldClass)) + ":" +
                                 std::string(Il2Cpp::il2cpp_class_get_name(fieldClass)) +
-                                " | Offset " + offsetStream.str() + " | RVA " + rvaStream.str());
+                                " | Offset 0x" + offsetStream.str());
             writer.WriteLine(Utils::GetCppNameFromIl2CppType(fieldClass, nullptr, &writer) + " " + std::string(Utils::FixName(fieldName)) + ";");
         }
     } else {
@@ -711,6 +820,22 @@ void codegen::parseClass(void* klass) {
 
     writer.CloseBracket(";");
     for (size_t i = 0; i < namespaceSplit.size(); ++i) {
+        writer.CloseBracket();
+    }
+
+    // BNM::Defaults::Get setup for non-valuetype classes for generics hopefully. Structs won't work on this but who cares, I'm not perfect
+    if (!isClassValueType) {
+        Utils::replaceAll(namespaze, ".", "::");
+        std::string typePath = fmt::format("{}::{}*", namespaze, fixedName);
+
+        writer.WriteLine();
+        writer.WriteLine("template <>");
+        writer.Write("BNM::Defaults::DefaultTypeRef ");
+        writer.Write("BNM::Defaults::Get<" + typePath + ">() ");
+        writer.WriteBracket();
+        writer.WriteLine("static BNM::Defaults::Internal::ClassType classCache = nullptr;");
+        writer.WriteLine(fmt::format("if (!classCache) classCache = {}._data;", Utils::GetClassGetter(klass)));
+        writer.WriteLine("return BNM::Defaults::DefaultTypeRef ({ &classCache });");
         writer.CloseBracket();
     }
 
